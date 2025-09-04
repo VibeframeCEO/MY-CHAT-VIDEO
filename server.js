@@ -204,6 +204,30 @@ app.post('/generate', async (req, res) => {
   }
 });
 
+// 🔥 Cleanup job: delete old files from TMP_DIR every 60 seconds
+setInterval(() => {
+  const maxAge = 2 * 60 * 1000; // 2 minutes
+  const now = Date.now();
+
+  fs.readdir(TMP_DIR, (err, files) => {
+    if (err) return console.error('Cleanup error (readdir):', err);
+
+    files.forEach(file => {
+      const filePath = path.join(TMP_DIR, file);
+      fs.stat(filePath, (err, stats) => {
+        if (err) return console.error('Cleanup error (stat):', err);
+
+        if (now - stats.mtimeMs > maxAge) {
+          fs.unlink(filePath, err => {
+            if (err) console.error('Cleanup error (unlink):', err);
+            else console.log('🗑️ Deleted old file:', filePath);
+          });
+        }
+      });
+    });
+  });
+}, 60 * 1000); // run every 1 minute
+
 app.listen(PORT, () => {
   console.log(`Bubble generator API listening on ${PORT}`);
 });
