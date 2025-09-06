@@ -136,22 +136,27 @@ async function generateConversationFrames(messages, options = {}) {
   mctx.font = `${fontSize}px sans-serif`;
 
   // Pre-calc bubble layout for all messages (lines, width, height)
-  const bubbles = messages.map((rawText, idx) => {
-    const text = String(rawText || '').trim();
-    const lines = wrapText(mctx, text, maxBubbleWidth - bubblePaddingX * 2);
-    const lineHeight = Math.max(fontSize * 1.12, fontSize + 6);
-    const textWidth = Math.max(...lines.map(l => mctx.measureText(l).width), 0);
-    const bubbleW = Math.min(maxBubbleWidth, Math.ceil(textWidth) + bubblePaddingX * 2);
-    const bubbleH = Math.ceil(lines.length * lineHeight + bubblePaddingY * 2);
-    return {
-      index: idx,
-      text,
-      lines,
-      bubbleW,
-      bubbleH,
-      lineHeight
-    };
-  });
+ const bubbles = messages.map((msg, idx) => {
+  const text = String(msg.text || '').trim();  // instead of rawText
+  const sender = msg.sender || "Sender";
+
+  const lines = wrapText(mctx, text, maxBubbleWidth - bubblePaddingX * 2);
+  const lineHeight = Math.max(fontSize * 1.12, fontSize + 6);
+  const textWidth = Math.max(...lines.map(l => mctx.measureText(l).width), 0);
+  const bubbleW = Math.min(maxBubbleWidth, Math.ceil(textWidth) + bubblePaddingX * 2);
+  const bubbleH = Math.ceil(lines.length * lineHeight + bubblePaddingY * 2);
+
+  return {
+    index: idx,
+    text,
+    sender,
+    lines,
+    bubbleW,
+    bubbleH,
+    lineHeight
+  };
+ });
+
 
   // compute y positions of stacked bubbles (top -> down)
   const positions = [];
@@ -210,7 +215,7 @@ async function generateConversationFrames(messages, options = {}) {
       if (bubbleY + b.bubbleH < 0 || bubbleY > height) continue;
 
       // x position (left or right)
-      const isSender = (i % 2) === 1;
+      const isSender = (b.sender.toLowerCase() === "sender");
       const bubbleX = isSender ? (width - marginSides - b.bubbleW) : marginSides;
 
       // shadow
