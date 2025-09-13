@@ -124,19 +124,23 @@ async function generateConversationFrames(messages, options = {}) {
     return { index: idx, text, sender, lines, bubbleW, bubbleH, lineHeight };
   });
 
-  const positions = [];
-  let cy = paddingTop;
-  for (let i = 0; i < bubbles.length; i++) {
-    positions.push(cy);
-    cy += bubbles[i].bubbleH + gapBetween;
-  }
-
   const frameBase = `${Date.now()}_${uuidv4()}`;
   const results = [];
 
   for (let state = 0; state < bubbles.length; state++) {
-    // Dynamically shrink canvas height so only last bubble + 20px is included
-    const cropHeight = positions[state] + bubbles[state].bubbleH + 20;
+    // ---- RESET AFTER 8 MESSAGES ----
+    const cycleIndex = state % 8;  
+    const startIndex = state - cycleIndex;  
+    const visibleBubbles = bubbles.slice(startIndex, state + 1);
+
+    let cy = paddingTop;
+    const positions = [];
+    for (let i = 0; i < visibleBubbles.length; i++) {
+      positions.push(cy);
+      cy += visibleBubbles[i].bubbleH + gapBetween;
+    }
+
+    const cropHeight = positions[positions.length - 1] + visibleBubbles[visibleBubbles.length - 1].bubbleH + 20;
     const canvas = createCanvas(width, Math.min(cropHeight, height));
     const ctx = canvas.getContext('2d');
 
@@ -153,8 +157,8 @@ async function generateConversationFrames(messages, options = {}) {
       ctx.fillRect(0, 0, width, canvas.height);
     }
 
-    for (let i = 0; i <= state; i++) {
-      const b = bubbles[i];
+    for (let i = 0; i < visibleBubbles.length; i++) {
+      const b = visibleBubbles[i];
       const bubbleY = positions[i];
       const isSender = (b.sender.toLowerCase() === "sender");
       const bubbleX = isSender ? (width - marginSides - b.bubbleW) : marginSides;
@@ -166,7 +170,7 @@ async function generateConversationFrames(messages, options = {}) {
       ctx.fill();
       ctx.restore();
 
-      // bubble fill (blue vs gray-black)
+      // bubble fill
       ctx.save();
       ctx.fillStyle = isSender ? '#2563eb' : '#1f2937';
       roundRect(ctx, bubbleX, bubbleY, b.bubbleW, b.bubbleH, 26);
