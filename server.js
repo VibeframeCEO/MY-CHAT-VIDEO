@@ -135,31 +135,27 @@ async function generateConversationFrames(messages, options = {}) {
   const results = [];
 
   for (let state = 0; state < bubbles.length; state++) {
-    const canvas = createCanvas(width, height);
+    // Dynamically shrink canvas height so only last bubble + 20px is included
+    const cropHeight = positions[state] + bubbles[state].bubbleH + 20;
+    const canvas = createCanvas(width, Math.min(cropHeight, height));
     const ctx = canvas.getContext('2d');
 
     if (backgroundPath && fs.existsSync(backgroundPath)) {
       try {
         const bg = await loadImage(backgroundPath);
-        ctx.drawImage(bg, 0, 0, width, height);
+        ctx.drawImage(bg, 0, 0, width, canvas.height);
       } catch (e) {
         ctx.fillStyle = '#0f1720';
-        ctx.fillRect(0, 0, width, height);
+        ctx.fillRect(0, 0, width, canvas.height);
       }
     } else {
       ctx.fillStyle = '#0f1720';
-      ctx.fillRect(0, 0, width, height);
+      ctx.fillRect(0, 0, width, canvas.height);
     }
-
-    const lastVisibleIndex = state;
-    const usedHeightUpToState = positions[lastVisibleIndex] + bubbles[lastVisibleIndex].bubbleH + paddingBottom;
-    let yOffset = usedHeightUpToState > height ? usedHeightUpToState - height : 0;
 
     for (let i = 0; i <= state; i++) {
       const b = bubbles[i];
-      const bubbleY = positions[i] - yOffset;
-      if (bubbleY + b.bubbleH < 0 || bubbleY > height) continue;
-
+      const bubbleY = positions[i];
       const isSender = (b.sender.toLowerCase() === "sender");
       const bubbleX = isSender ? (width - marginSides - b.bubbleW) : marginSides;
 
