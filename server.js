@@ -98,7 +98,7 @@ async function generateConversationFrames(messages, options = {}) {
   const {
     width = 1080,
     height = 1920,
-    paddingTop = 10, // 🔥 now fixed: only 10px top padding
+    paddingTop = 50,       // 🔥 increased padding
     paddingBottom = 140,
     marginSides = 36,
     bubblePaddingX = 32,
@@ -128,9 +128,9 @@ async function generateConversationFrames(messages, options = {}) {
   const results = [];
 
   for (let state = 0; state < bubbles.length; state++) {
-    // ---- RESET AFTER 8 MESSAGES ----
-    const cycleIndex = state % 8;  
-    const startIndex = state - cycleIndex;  
+    // ---- RESET AFTER 10 MESSAGES ----
+    const cycleIndex = state % 10;
+    const startIndex = state - cycleIndex;
     const visibleBubbles = bubbles.slice(startIndex, state + 1);
 
     let cy = paddingTop;
@@ -140,16 +140,23 @@ async function generateConversationFrames(messages, options = {}) {
       cy += visibleBubbles[i].bubbleH + gapBetween;
     }
 
-    // 🔥 FIX: instead of squeezing canvas, just crop bottom
-    const cropHeight = positions[positions.length - 1] + visibleBubbles[visibleBubbles.length - 1].bubbleH + 20;
-    const canvas = createCanvas(width, cropHeight); // removed Math.min(height)
+    const cropHeight = positions[positions.length - 1] + visibleBubbles[visibleBubbles.length - 1].bubbleH + 50;
+    const canvas = createCanvas(width, cropHeight);
 
     const ctx = canvas.getContext('2d');
 
+    // draw background in full width without squeezing
     if (backgroundPath && fs.existsSync(backgroundPath)) {
       try {
         const bg = await loadImage(backgroundPath);
-        ctx.drawImage(bg, 0, 0, width, canvas.height); // draw full template, cropped automatically
+        const aspect = bg.width / bg.height;
+        const bgHeight = width / aspect;  // maintain aspect ratio
+        ctx.drawImage(bg, 0, 0, width, bgHeight);
+        // if bg smaller than canvas, fill rest with dark color
+        if (bgHeight < canvas.height) {
+          ctx.fillStyle = '#0f1720';
+          ctx.fillRect(0, bgHeight, width, canvas.height - bgHeight);
+        }
       } catch (e) {
         ctx.fillStyle = '#0f1720';
         ctx.fillRect(0, 0, width, canvas.height);
@@ -211,8 +218,6 @@ async function generateConversationFrames(messages, options = {}) {
   return results;
 }
 
-function reqHostPlaceholder() { return ''; }
-
 app.post('/generate', async (req, res) => {
   try {
     const body = req.body || {};
@@ -250,6 +255,7 @@ app.post('/generate', async (req, res) => {
   }
 });
 
+// cleanup tmp dir
 setInterval(() => {
   const maxAge = 2 * 60 * 1000;
   const now = Date.now();
