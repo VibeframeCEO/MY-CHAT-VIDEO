@@ -8,16 +8,13 @@ const { v4: uuidv4 } = require('uuid');
 const morgan = require('morgan');
 const cloudinary = require('cloudinary').v2;
 
-// Optional: register a TTF font if you have one (uncomment & adjust path)
+// Optional: register a TTF font if you have one
 // registerFont(path.join(__dirname, 'fonts', 'DejaVuSans-Bold.ttf'), { family: 'DejaVu' });
 
 const PORT = process.env.PORT || 3000;
 const TMP_DIR = process.env.TMP_DIR || '/tmp';
 fs.mkdirSync(TMP_DIR, { recursive: true });
 
-/* Cloudinary config (optional)
- * If you set CLOUDINARY_URL or the individual env vars, uploading will work.
- */
 if (process.env.CLOUDINARY_URL) {
   cloudinary.config({ secure: true });
 } else if (process.env.CLOUDINARY_CLOUD_NAME) {
@@ -33,13 +30,10 @@ const app = express();
 app.use(morgan('dev'));
 app.use(bodyParser.json({ limit: '2mb' }));
 
-// Serve generated images if using local fallback
 app.use('/tmp', express.static(TMP_DIR));
 
-// Simple health
 app.get('/', (req, res) => res.send('✅ Bubble generator up'));
 
-/* helper: rounded rectangle */
 function roundRect(ctx, x, y, w, h, r) {
   const min = Math.min(w / 2, h / 2);
   if (r > min) r = min;
@@ -52,12 +46,10 @@ function roundRect(ctx, x, y, w, h, r) {
   ctx.closePath();
 }
 
-/* wrapText: returns array of lines for given ctx/font and maxWidth */
 function wrapText(ctx, text, maxWidth) {
   const words = text.split(' ');
   const lines = [];
   let cur = '';
-
   for (let i = 0; i < words.length; i++) {
     const test = cur ? (cur + ' ' + words[i]) : words[i];
     const w = ctx.measureText(test).width;
@@ -102,9 +94,6 @@ function wrapText(ctx, text, maxWidth) {
   return lines;
 }
 
-/*
- * produce frames: for each i produce an image that contains messages[0..i]
- */
 async function generateConversationFrames(messages, options = {}) {
   const {
     width = 1080,
@@ -112,43 +101,36 @@ async function generateConversationFrames(messages, options = {}) {
     paddingTop = 140,
     paddingBottom = 140,
     marginSides = 36,
-    bubblePaddingX = 28,
-    bubblePaddingY = 20,
-    gapBetween = 18,
-    fontSize = 48,
+    bubblePaddingX = 32,
+    bubblePaddingY = 24,
+    gapBetween = 22,
+    fontSize = 54,
     maxBubbleWidth = Math.floor(width * 0.75),
-    backgroundPath // ⬅️ use what caller passes, don’t override
+    backgroundPath
   } = options;
 
-  // tmp canvas for text measuring
   const measureCanvas = createCanvas(10, 10);
   const mctx = measureCanvas.getContext('2d');
   mctx.font = `${fontSize}px sans-serif`;
 
-  // Pre-calc bubble layout
   const bubbles = messages.map((msg, idx) => {
     const text = String(msg.text || '').trim();
     const sender = msg.sender || "Sender";
-
     const lines = wrapText(mctx, text, maxBubbleWidth - bubblePaddingX * 2);
     const lineHeight = Math.max(fontSize * 1.12, fontSize + 6);
     const textWidth = Math.max(...lines.map(l => mctx.measureText(l).width), 0);
     const bubbleW = Math.min(maxBubbleWidth, Math.ceil(textWidth) + bubblePaddingX * 2);
     const bubbleH = Math.ceil(lines.length * lineHeight + bubblePaddingY * 2);
-
     return { index: idx, text, sender, lines, bubbleW, bubbleH, lineHeight };
   });
 
-  // compute y positions
   const positions = [];
   let cy = paddingTop;
   for (let i = 0; i < bubbles.length; i++) {
     positions.push(cy);
     cy += bubbles[i].bubbleH + gapBetween;
   }
-  const totalStackHeight = cy + paddingBottom - gapBetween;
 
-  // generate frames
   const frameBase = `${Date.now()}_${uuidv4()}`;
   const results = [];
 
@@ -156,7 +138,6 @@ async function generateConversationFrames(messages, options = {}) {
     const canvas = createCanvas(width, height);
     const ctx = canvas.getContext('2d');
 
-    // background
     if (backgroundPath && fs.existsSync(backgroundPath)) {
       try {
         const bg = await loadImage(backgroundPath);
@@ -182,19 +163,22 @@ async function generateConversationFrames(messages, options = {}) {
       const isSender = (b.sender.toLowerCase() === "sender");
       const bubbleX = isSender ? (width - marginSides - b.bubbleW) : marginSides;
 
+      // subtle shadow
       ctx.save();
-      ctx.fillStyle = 'rgba(0,0,0,0.35)';
-      roundRect(ctx, bubbleX + 4, bubbleY + 8, b.bubbleW, b.bubbleH, 24);
+      ctx.fillStyle = 'rgba(0,0,0,0.25)';
+      roundRect(ctx, bubbleX + 3, bubbleY + 6, b.bubbleW, b.bubbleH, 26);
       ctx.fill();
       ctx.restore();
 
+      // bubble fill (blue vs gray-black)
       ctx.save();
-      ctx.fillStyle = isSender ? '#10b981' : '#374151';
-      roundRect(ctx, bubbleX, bubbleY, b.bubbleW, b.bubbleH, 24);
+      ctx.fillStyle = isSender ? '#2563eb' : '#1f2937';
+      roundRect(ctx, bubbleX, bubbleY, b.bubbleW, b.bubbleH, 26);
       ctx.fill();
       ctx.restore();
 
-      ctx.fillStyle = isSender ? '#ffffff' : '#f3f4f6';
+      // text
+      ctx.fillStyle = '#ffffff';
       ctx.font = `${fontSize}px sans-serif`;
       ctx.textBaseline = 'top';
       let ty = bubbleY + bubblePaddingY;
@@ -235,7 +219,7 @@ app.post('/generate', async (req, res) => {
 
     const width = body.width || 1080;
     const height = body.height || 1920;
-    const fontSize = body.fontSize || 48;
+    const fontSize = body.fontSize || 54;
     const templatePath = body.templatePath ? path.resolve(body.templatePath) : path.join(__dirname, 'templates', 'phone-ui.png');
 
     if (body.cloudinaryUpload === true) process.env.CLOUDINARY_UPLOAD = 'true';
