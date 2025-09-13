@@ -98,7 +98,7 @@ async function generateConversationFrames(messages, options = {}) {
   const {
     width = 1080,
     height = 1920,
-    paddingTop = 140,
+    paddingTop = 10, // 🔥 now fixed: only 10px top padding
     paddingBottom = 140,
     marginSides = 36,
     bubblePaddingX = 32,
@@ -140,75 +140,16 @@ async function generateConversationFrames(messages, options = {}) {
       cy += visibleBubbles[i].bubbleH + gapBetween;
     }
 
+    // 🔥 FIX: instead of squeezing canvas, just crop bottom
     const cropHeight = positions[positions.length - 1] + visibleBubbles[visibleBubbles.length - 1].bubbleH + 20;
-    // ---- inside generateConversationFrames loop ----
-const cropHeight = positions[positions.length - 1] + visibleBubbles[visibleBubbles.length - 1].bubbleH + 20;
-
-// Always use full height, don’t squeeze
-const canvas = createCanvas(width, height);
-const ctx = canvas.getContext('2d');
-
-// Fill whole canvas with background/template
-if (backgroundPath && fs.existsSync(backgroundPath)) {
-  try {
-    const bg = await loadImage(backgroundPath);
-    ctx.drawImage(bg, 0, 0, width, height); // full size
-  } catch (e) {
-    ctx.fillStyle = '#0f1720';
-    ctx.fillRect(0, 0, width, height);
-  }
-} else {
-  ctx.fillStyle = '#0f1720';
-  ctx.fillRect(0, 0, width, height);
-}
-
-// Clip template at cropHeight (instead of squeezing)
-ctx.save();
-ctx.beginPath();
-ctx.rect(0, 10, width, cropHeight); // start 10px padding at top
-ctx.clip();
-
-// Now draw bubbles
-for (let i = 0; i < visibleBubbles.length; i++) {
-  const b = visibleBubbles[i];
-  const bubbleY = positions[i];
-  const isSender = (b.sender.toLowerCase() === "sender");
-  const bubbleX = isSender ? (width - marginSides - b.bubbleW) : marginSides;
-
-  // shadow
-  ctx.save();
-  ctx.fillStyle = 'rgba(0,0,0,0.25)';
-  roundRect(ctx, bubbleX + 3, bubbleY + 6, b.bubbleW, b.bubbleH, 26);
-  ctx.fill();
-  ctx.restore();
-
-  // bubble fill
-  ctx.save();
-  ctx.fillStyle = isSender ? '#2563eb' : '#1f2937';
-  roundRect(ctx, bubbleX, bubbleY, b.bubbleW, b.bubbleH, 26);
-  ctx.fill();
-  ctx.restore();
-
-  // text
-  ctx.fillStyle = '#ffffff';
-  ctx.font = `${fontSize}px sans-serif`;
-  ctx.textBaseline = 'top';
-  let ty = bubbleY + bubblePaddingY;
-  const tx = bubbleX + bubblePaddingX;
-  for (const line of b.lines) {
-    ctx.fillText(line, tx, ty);
-    ty += b.lineHeight;
-  }
-}
-
-ctx.restore();
+    const canvas = createCanvas(width, cropHeight); // removed Math.min(height)
 
     const ctx = canvas.getContext('2d');
 
     if (backgroundPath && fs.existsSync(backgroundPath)) {
       try {
         const bg = await loadImage(backgroundPath);
-        ctx.drawImage(bg, 0, 0, width, canvas.height);
+        ctx.drawImage(bg, 0, 0, width, canvas.height); // draw full template, cropped automatically
       } catch (e) {
         ctx.fillStyle = '#0f1720';
         ctx.fillRect(0, 0, width, canvas.height);
