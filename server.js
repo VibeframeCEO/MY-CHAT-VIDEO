@@ -212,39 +212,40 @@ async function generateConversationFrames(messages, options = {}) {
       // ---------- TICKS logic ----------
       // Determine final status to display:
       // if message included a detected status use it, otherwise default to 'delivered' so ticks are visible
-      const finalStatus = b.status || 'delivered'; // change default here if you want 'sent' instead
+ // ---------- TICKS logic ----------
+    const finalStatus = b.status || 'delivered';
 
-      if (isSender) {
-        // tick text & color
-        let tickText = '✔✔';
-        let tickColor = '#9ca3af'; // gray by default
+if (isSender) {
+  let tickText = '✔✔';
+  let tickColor = '#9ca3af'; // gray
 
-        if (finalStatus === 'sent') {
-          tickText = '✔';
-          tickColor = '#9ca3af';
-        } else if (finalStatus === 'delivered') {
-          tickText = '✔✔';
-          tickColor = '#9ca3af';
-        } else if (finalStatus === 'seen' || finalStatus === 'read') {
-          tickText = '✔✔';
-          tickColor = '#3b82f6'; // blue
-        }
+  if (finalStatus === 'sent') {
+    tickText = '✔';
+    tickColor = '#9ca3af';
+  } else if (finalStatus === 'delivered') {
+    tickText = '✔✔';
+    tickColor = '#9ca3af';
+  } else if (finalStatus === 'seen' || finalStatus === 'read') {
+    tickText = '✔✔';
+    tickColor = '#3b82f6'; // blue
+  }
 
-        // small tick font scaled to main font
-        const tickFontSize = Math.max(12, Math.floor(fontSize * 0.56));
-        ctx.font = `${tickFontSize}px sans-serif`;
-        ctx.textBaseline = 'alphabetic';
-        const tickWidth = ctx.measureText(tickText).width;
+  // make ticks bigger (scale to ~0.8 of font size instead of 0.56)
+  const tickFontSize = Math.max(18, Math.floor(fontSize * 0.8));
+  ctx.font = `${tickFontSize}px sans-serif`;
+  ctx.textBaseline = 'alphabetic';
 
-        // place tick inside bubble bottom-right with some padding
-        const tickX = bubbleX + b.bubbleW - bubblePaddingX - tickWidth;
-        // vertical position: slightly above the bottom padding so it's visible inside bubble
-        const tickY = bubbleY + b.bubbleH - (bubblePaddingY * 0.3);
+  const tickWidth = ctx.measureText(tickText).width;
 
-        ctx.fillStyle = tickColor;
-        ctx.fillText(tickText, tickX, tickY);
-      }
-      // ---------- end ticks ----------
+  // put ticks a bit above bottom padding, tighter inside the bubble
+  const tickX = bubbleX + b.bubbleW - bubblePaddingX - tickWidth;
+  const tickY = bubbleY + b.bubbleH - bubblePaddingY * 0.6;
+
+  ctx.fillStyle = tickColor;
+  ctx.fillText(tickText, tickX, tickY);
+   }
+// ---------- end ticks ----------
+
     }
 
     const frameName = `${frameBase}_${String(state).padStart(3, '0')}.png`;
