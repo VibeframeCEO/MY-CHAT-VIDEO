@@ -212,36 +212,41 @@ async function generateConversationFrames(messages, options = {}) {
 // ---------- TICKS logic ----------
 const finalStatus = b.status || 'delivered';
 
-if (isSender) {
-  let tickText = '✔✔';
-  let tickColor = '#9ca3af'; // gray
+let tickText = '✔✔';
+let tickColor = '#9ca3af'; // gray
 
-  if (finalStatus === 'sent') {
-    tickText = '✔';
-    tickColor = '#9ca3af';
-  } else if (finalStatus === 'delivered') {
-    tickText = '✔✔';
-    tickColor = '#008000';
-  } else if (finalStatus === 'seen' || finalStatus === 'read') {
-    tickText = '✔✔';
-    tickColor = '#008000'; // blue
-  }
-
-  // bigger ticks
-  const tickFontSize = Math.max(18, Math.floor(fontSize * 0.8));
-  ctx.font = `${tickFontSize}px sans-serif`;
-  ctx.textBaseline = 'alphabetic';
-
-  const tickWidth = ctx.measureText(tickText).width;
-
-  // ✅ fix horizontal alignment
-  const tickX = bubbleX + b.bubbleW - tickWidth - 10; // small 10px padding from the right edge
-  const tickY = bubbleY + b.bubbleH - bubblePaddingY * 0.1; // sits nicely above bottom
-
-  ctx.fillStyle = tickColor;
-  ctx.fillText(tickText, tickX, tickY);
+if (finalStatus === 'sent') {
+  tickText = '✔';
+  tickColor = '#9ca3af';
+} else if (finalStatus === 'delivered') {
+  tickText = '✔✔';
+  tickColor = '#9ca3af';
+} else if (finalStatus === 'seen' || finalStatus === 'read') {
+  tickText = '✔✔';
+  tickColor = '#0080ff'; // blue
 }
+
+// bigger ticks
+const tickFontSize = Math.max(18, Math.floor(fontSize * 0.8));
+ctx.font = `${tickFontSize}px sans-serif`;
+ctx.textBaseline = 'alphabetic';
+
+const tickWidth = ctx.measureText(tickText).width;
+
+// ✅ placement differs for sender vs receiver
+let tickX, tickY;
+if (isSender) {
+  tickX = bubbleX + b.bubbleW - tickWidth - 10; // right aligned
+  tickY = bubbleY + b.bubbleH - bubblePaddingY * 0.1;
+} else {
+  tickX = bubbleX + 10; // left aligned
+  tickY = bubbleY + b.bubbleH - bubblePaddingY * 0.1;
+}
+
+ctx.fillStyle = tickColor;
+ctx.fillText(tickText, tickX, tickY);
 // ---------- end ticks ----------
+
 
 
     }
