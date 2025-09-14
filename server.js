@@ -239,7 +239,7 @@ if (isSender) {
 
   // put ticks a bit above bottom padding, tighter inside the bubble
   const tickX = bubbleX + b.bubbleW - bubblePaddingX - tickWidth;
-  const tickY = bubbleY + b.bubbleH - bubblePaddingY * 0.6;
+  const tickY = bubbleY + b.bubbleH - bubblePaddingY * 0.2;
 
   ctx.fillStyle = tickColor;
   ctx.fillText(tickText, tickX, tickY);
