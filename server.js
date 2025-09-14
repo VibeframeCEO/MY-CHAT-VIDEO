@@ -221,10 +221,10 @@ if (isSender) {
     tickColor = '#9ca3af';
   } else if (finalStatus === 'delivered') {
     tickText = '✔✔';
-    tickColor = '#9ca3af';
+    tickColor = '#0000FF';
   } else if (finalStatus === 'seen' || finalStatus === 'read') {
     tickText = '✔✔';
-    tickColor = '#3b82f6'; // blue
+    tickColor = '#0000FF'; // blue
   }
 
   // bigger ticks
