@@ -209,11 +209,8 @@ async function generateConversationFrames(messages, options = {}) {
         ty += b.lineHeight;
       }
 
-      // ---------- TICKS logic ----------
-      // Determine final status to display:
-      // if message included a detected status use it, otherwise default to 'delivered' so ticks are visible
- // ---------- TICKS logic ----------
-    const finalStatus = b.status || 'delivered';
+// ---------- TICKS logic ----------
+const finalStatus = b.status || 'delivered';
 
 if (isSender) {
   let tickText = '✔✔';
@@ -230,21 +227,22 @@ if (isSender) {
     tickColor = '#3b82f6'; // blue
   }
 
-  // make ticks bigger (scale to ~0.8 of font size instead of 0.56)
+  // bigger ticks
   const tickFontSize = Math.max(18, Math.floor(fontSize * 0.8));
   ctx.font = `${tickFontSize}px sans-serif`;
   ctx.textBaseline = 'alphabetic';
 
   const tickWidth = ctx.measureText(tickText).width;
 
-  // put ticks a bit above bottom padding, tighter inside the bubble
-  const tickX = bubbleX + b.bubbleW - bubblePaddingX - tickWidth;
-  const tickY = bubbleY + b.bubbleH - bubblePaddingY * 0.2;
+  // ✅ fix horizontal alignment
+  const tickX = bubbleX + b.bubbleW - tickWidth - 10; // small 10px padding from the right edge
+  const tickY = bubbleY + b.bubbleH - bubblePaddingY * 0.1; // sits nicely above bottom
 
   ctx.fillStyle = tickColor;
   ctx.fillText(tickText, tickX, tickY);
-   }
+}
 // ---------- end ticks ----------
+
 
     }
 
