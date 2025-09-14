@@ -98,8 +98,8 @@ async function generateConversationFrames(messages, options = {}) {
   const {
     width = 1080,
     height = 1920,
-    paddingTop = 50,       // 🔥 increased padding
-    paddingBottom = 140,
+    paddingTop = 200,       // 🔥 increased padding
+    paddingBottom = 200,
     marginSides = 36,
     bubblePaddingX = 32,
     bubblePaddingY = 24,
