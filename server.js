@@ -98,7 +98,7 @@ async function generateConversationFrames(messages, options = {}) {
   const {
     width = 1080,
     height = 1920,
-    paddingTop = 200,       // 🔥 increased padding
+    paddingTop = 200,
     paddingBottom = 200,
     marginSides = 36,
     bubblePaddingX = 32,
@@ -116,19 +116,19 @@ async function generateConversationFrames(messages, options = {}) {
   const bubbles = messages.map((msg, idx) => {
     const text = String(msg.text || '').trim();
     const sender = msg.sender || "Sender";
+    const status = msg.status || null; // 👈 new: sent, delivered, seen
     const lines = wrapText(mctx, text, maxBubbleWidth - bubblePaddingX * 2);
     const lineHeight = Math.max(fontSize * 1.12, fontSize + 6);
     const textWidth = Math.max(...lines.map(l => mctx.measureText(l).width), 0);
     const bubbleW = Math.min(maxBubbleWidth, Math.ceil(textWidth) + bubblePaddingX * 2);
     const bubbleH = Math.ceil(lines.length * lineHeight + bubblePaddingY * 2);
-    return { index: idx, text, sender, lines, bubbleW, bubbleH, lineHeight };
+    return { index: idx, text, sender, status, lines, bubbleW, bubbleH, lineHeight };
   });
 
   const frameBase = `${Date.now()}_${uuidv4()}`;
   const results = [];
 
   for (let state = 0; state < bubbles.length; state++) {
-    // ---- RESET AFTER 10 MESSAGES ----
     const cycleIndex = state % 10;
     const startIndex = state - cycleIndex;
     const visibleBubbles = bubbles.slice(startIndex, state + 1);
@@ -142,17 +142,15 @@ async function generateConversationFrames(messages, options = {}) {
 
     const cropHeight = positions[positions.length - 1] + visibleBubbles[visibleBubbles.length - 1].bubbleH + 50;
     const canvas = createCanvas(width, cropHeight);
-
     const ctx = canvas.getContext('2d');
 
-    // draw background in full width without squeezing
+    // background
     if (backgroundPath && fs.existsSync(backgroundPath)) {
       try {
         const bg = await loadImage(backgroundPath);
         const aspect = bg.width / bg.height;
-        const bgHeight = width / aspect;  // maintain aspect ratio
+        const bgHeight = width / aspect;
         ctx.drawImage(bg, 0, 0, width, bgHeight);
-        // if bg smaller than canvas, fill rest with dark color
         if (bgHeight < canvas.height) {
           ctx.fillStyle = '#0f1720';
           ctx.fillRect(0, bgHeight, width, canvas.height - bgHeight);
@@ -166,20 +164,21 @@ async function generateConversationFrames(messages, options = {}) {
       ctx.fillRect(0, 0, width, canvas.height);
     }
 
+    // draw bubbles
     for (let i = 0; i < visibleBubbles.length; i++) {
       const b = visibleBubbles[i];
       const bubbleY = positions[i];
       const isSender = (b.sender.toLowerCase() === "sender");
       const bubbleX = isSender ? (width - marginSides - b.bubbleW) : marginSides;
 
-      // subtle shadow
+      // shadow
       ctx.save();
       ctx.fillStyle = 'rgba(0,0,0,0.25)';
       roundRect(ctx, bubbleX + 3, bubbleY + 6, b.bubbleW, b.bubbleH, 26);
       ctx.fill();
       ctx.restore();
 
-      // bubble fill
+      // bubble
       ctx.save();
       ctx.fillStyle = isSender ? '#2563eb' : '#1f2937';
       roundRect(ctx, bubbleX, bubbleY, b.bubbleW, b.bubbleH, 26);
@@ -195,6 +194,28 @@ async function generateConversationFrames(messages, options = {}) {
       for (const line of b.lines) {
         ctx.fillText(line, tx, ty);
         ty += b.lineHeight;
+      }
+
+      // ✅ ticks for sender messages
+      if (isSender && b.status) {
+        let tickText = "✔"; // default = sent
+        let tickColor = "#9ca3af"; // gray
+
+        if (b.status === "delivered") {
+          tickText = "✔✔";
+        } else if (b.status === "seen") {
+          tickText = "✔✔";
+          tickColor = "#3b82f6"; // blue
+        }
+
+        ctx.font = `${Math.floor(fontSize * 0.6)}px sans-serif`;
+        ctx.fillStyle = tickColor;
+        ctx.textBaseline = "alphabetic";
+        ctx.fillText(
+          tickText,
+          bubbleX + b.bubbleW - bubblePaddingX - 40,
+          bubbleY + b.bubbleH - bubblePaddingY / 2
+        );
       }
     }
 
