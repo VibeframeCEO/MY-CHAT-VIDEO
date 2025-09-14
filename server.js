@@ -113,16 +113,29 @@ async function generateConversationFrames(messages, options = {}) {
   const mctx = measureCanvas.getContext('2d');
   mctx.font = `${fontSize}px sans-serif`;
 
+  // helper: detect a "status" for a message from various possible fields
+  function detectStatusFromMsg(msg) {
+    if (!msg) return null;
+    // explicit status string
+    const s = (msg.status || msg.state || msg.tick || '').toString().toLowerCase();
+    if (s === 'sent' || s === 'delivered' || s === 'seen' || s === 'read') return s === 'read' ? 'seen' : s;
+    // booleans / synonyms
+    if (msg.seen === true || msg.read === true || msg.read_at || msg.readAt) return 'seen';
+    if (msg.delivered === true || msg.delivered_at || msg.deliveredAt) return 'delivered';
+    // fallback null -> we'll default later
+    return null;
+  }
+
   const bubbles = messages.map((msg, idx) => {
     const text = String(msg.text || '').trim();
-    const sender = msg.sender || "Sender";
-    const status = msg.status || null; // 👈 new: sent, delivered, seen
+    const sender = msg.sender || msg.role || "Sender";
+    const detected = detectStatusFromMsg(msg);
     const lines = wrapText(mctx, text, maxBubbleWidth - bubblePaddingX * 2);
     const lineHeight = Math.max(fontSize * 1.12, fontSize + 6);
     const textWidth = Math.max(...lines.map(l => mctx.measureText(l).width), 0);
     const bubbleW = Math.min(maxBubbleWidth, Math.ceil(textWidth) + bubblePaddingX * 2);
     const bubbleH = Math.ceil(lines.length * lineHeight + bubblePaddingY * 2);
-    return { index: idx, text, sender, status, lines, bubbleW, bubbleH, lineHeight };
+    return { index: idx, text, sender, status: detected, lines, bubbleW, bubbleH, lineHeight };
   });
 
   const frameBase = `${Date.now()}_${uuidv4()}`;
@@ -141,16 +154,17 @@ async function generateConversationFrames(messages, options = {}) {
     }
 
     const cropHeight = positions[positions.length - 1] + visibleBubbles[visibleBubbles.length - 1].bubbleH + 50;
-    const canvas = createCanvas(width, cropHeight);
+    const canvas = createCanvas(width, Math.min(cropHeight, height));
     const ctx = canvas.getContext('2d');
 
-    // background
+    // draw background in full width without squeezing
     if (backgroundPath && fs.existsSync(backgroundPath)) {
       try {
         const bg = await loadImage(backgroundPath);
         const aspect = bg.width / bg.height;
-        const bgHeight = width / aspect;
+        const bgHeight = width / aspect;  // maintain aspect ratio
         ctx.drawImage(bg, 0, 0, width, bgHeight);
+        // if bg smaller than canvas, fill rest with dark color
         if (bgHeight < canvas.height) {
           ctx.fillStyle = '#0f1720';
           ctx.fillRect(0, bgHeight, width, canvas.height - bgHeight);
@@ -164,21 +178,20 @@ async function generateConversationFrames(messages, options = {}) {
       ctx.fillRect(0, 0, width, canvas.height);
     }
 
-    // draw bubbles
     for (let i = 0; i < visibleBubbles.length; i++) {
       const b = visibleBubbles[i];
       const bubbleY = positions[i];
-      const isSender = (b.sender.toLowerCase() === "sender");
+      const isSender = (b.sender.toString().toLowerCase() === "sender");
       const bubbleX = isSender ? (width - marginSides - b.bubbleW) : marginSides;
 
-      // shadow
+      // subtle shadow
       ctx.save();
       ctx.fillStyle = 'rgba(0,0,0,0.25)';
       roundRect(ctx, bubbleX + 3, bubbleY + 6, b.bubbleW, b.bubbleH, 26);
       ctx.fill();
       ctx.restore();
 
-      // bubble
+      // bubble fill
       ctx.save();
       ctx.fillStyle = isSender ? '#2563eb' : '#1f2937';
       roundRect(ctx, bubbleX, bubbleY, b.bubbleW, b.bubbleH, 26);
@@ -196,27 +209,42 @@ async function generateConversationFrames(messages, options = {}) {
         ty += b.lineHeight;
       }
 
-      // ✅ ticks for sender messages
-      if (isSender && b.status) {
-        let tickText = "✔"; // default = sent
-        let tickColor = "#9ca3af"; // gray
+      // ---------- TICKS logic ----------
+      // Determine final status to display:
+      // if message included a detected status use it, otherwise default to 'delivered' so ticks are visible
+      const finalStatus = b.status || 'delivered'; // change default here if you want 'sent' instead
 
-        if (b.status === "delivered") {
-          tickText = "✔✔";
-        } else if (b.status === "seen") {
-          tickText = "✔✔";
-          tickColor = "#3b82f6"; // blue
+      if (isSender) {
+        // tick text & color
+        let tickText = '✔✔';
+        let tickColor = '#9ca3af'; // gray by default
+
+        if (finalStatus === 'sent') {
+          tickText = '✔';
+          tickColor = '#9ca3af';
+        } else if (finalStatus === 'delivered') {
+          tickText = '✔✔';
+          tickColor = '#9ca3af';
+        } else if (finalStatus === 'seen' || finalStatus === 'read') {
+          tickText = '✔✔';
+          tickColor = '#3b82f6'; // blue
         }
 
-        ctx.font = `${Math.floor(fontSize * 0.6)}px sans-serif`;
+        // small tick font scaled to main font
+        const tickFontSize = Math.max(12, Math.floor(fontSize * 0.56));
+        ctx.font = `${tickFontSize}px sans-serif`;
+        ctx.textBaseline = 'alphabetic';
+        const tickWidth = ctx.measureText(tickText).width;
+
+        // place tick inside bubble bottom-right with some padding
+        const tickX = bubbleX + b.bubbleW - bubblePaddingX - tickWidth;
+        // vertical position: slightly above the bottom padding so it's visible inside bubble
+        const tickY = bubbleY + b.bubbleH - (bubblePaddingY * 0.3);
+
         ctx.fillStyle = tickColor;
-        ctx.textBaseline = "alphabetic";
-        ctx.fillText(
-          tickText,
-          bubbleX + b.bubbleW - bubblePaddingX - 40,
-          bubbleY + b.bubbleH - bubblePaddingY / 2
-        );
+        ctx.fillText(tickText, tickX, tickY);
       }
+      // ---------- end ticks ----------
     }
 
     const frameName = `${frameBase}_${String(state).padStart(3, '0')}.png`;
