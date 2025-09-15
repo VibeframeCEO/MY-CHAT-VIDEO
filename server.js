@@ -141,7 +141,19 @@ async function generateConversationFrames(messages, options = {}) {
   const results = [];
 
   for (let state = 0; state < bubbles.length; state++) {
-    const visibleBubbles = bubbles.slice(0, state + 1);
+  let visibleBubbles = bubbles.slice(0, state + 1);
+
+  // 🔥 remove typing bubble if next state replaces it
+  if (state > 0) {
+    const prev = bubbles[state - 1];
+    const curr = bubbles[state];
+
+    if (prev.typing && curr.sender === prev.sender && !curr.typing) {
+      // drop typing bubble (the one before current)
+      visibleBubbles = visibleBubbles.filter(b => b !== prev);
+    }
+  }
+
 
     let cy = paddingTop;
     const positions = [];
