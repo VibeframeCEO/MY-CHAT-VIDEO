@@ -141,19 +141,32 @@ async function generateConversationFrames(messages, options = {}) {
   const results = [];
 
   for (let state = 0; state < bubbles.length; state++) {
-  let visibleBubbles = bubbles.slice(0, state + 1);
 
-  // 🔥 remove typing bubble if next state replaces it
-  if (state > 0) {
-    const prev = bubbles[state - 1];
-    const curr = bubbles[state];
+    // --- Build visibleBubbles robustly so typing is removed when real message is already present ---
+    const visibleBubbles = [];
+    for (let j = 0; j <= state; j++) {
+      const b = bubbles[j];
 
-    if (prev.typing && curr.sender === prev.sender && !curr.typing) {
-      // drop typing bubble (the one before current)
-      visibleBubbles = visibleBubbles.filter(b => b !== prev);
+      if (b.typing) {
+        // find the next real (non-typing) message from the same sender
+        let nextRealIdx = -1;
+        for (let k = j + 1; k < bubbles.length; k++) {
+          if (!bubbles[k].typing && bubbles[k].sender === b.sender) {
+            nextRealIdx = k;
+            break;
+          }
+        }
+        // include typing only if the corresponding real message is NOT yet visible in this frame
+        if (nextRealIdx === -1 || nextRealIdx > state) {
+          visibleBubbles.push(b);
+        } else {
+          // skip typing because its real message is already visible in this frame
+        }
+      } else {
+        visibleBubbles.push(b);
+      }
     }
-  }
-
+    // --- end visibleBubbles builder ---
 
     let cy = paddingTop;
     const positions = [];
@@ -162,7 +175,14 @@ async function generateConversationFrames(messages, options = {}) {
       cy += visibleBubbles[i].bubbleH + gapBetween;
     }
 
-    const cropHeight = positions[positions.length - 1] + visibleBubbles[visibleBubbles.length - 1].bubbleH + 50;
+    // Ensure we have at least one bubble (defensive)
+    if (positions.length === 0) {
+      positions.push(paddingTop);
+    }
+
+    const lastPos = positions[positions.length - 1];
+    const lastBubble = visibleBubbles[visibleBubbles.length - 1] || { bubbleH: 0 };
+    const cropHeight = lastPos + lastBubble.bubbleH + 50;
     const canvas = createCanvas(width, Math.min(cropHeight, height));
     const ctx = canvas.getContext('2d');
 
@@ -207,14 +227,16 @@ async function generateConversationFrames(messages, options = {}) {
       ctx.restore();
 
       if (b.typing) {
-        // typing dots
-        ctx.fillStyle = '#fff';
-        const dotSize = Math.floor(fontSize * 0.35);
+        // typing dots centered vertically inside bubble, and slightly shifted to match left/right side
+        ctx.fillStyle = '#ffffff';
+        const dotSize = Math.max(6, Math.floor(fontSize * 0.28));
+        const totalWidth = dotSize * 4; // spacing
+        const startX = bubbleX + (b.bubbleW / 2) - (totalWidth / 2);
+
         const centerY = bubbleY + b.bubbleH / 2;
-        const startX = bubbleX + b.bubbleW / 2 - dotSize * 2;
         for (let d = 0; d < 3; d++) {
           ctx.beginPath();
-          ctx.arc(startX + d * dotSize * 2, centerY, dotSize, 0, 2 * Math.PI);
+          ctx.arc(startX + d * (dotSize * 1.7), centerY, dotSize, 0, 2 * Math.PI);
           ctx.fill();
         }
         continue;
@@ -231,7 +253,7 @@ async function generateConversationFrames(messages, options = {}) {
         ty += b.lineHeight;
       }
 
-      // ticks
+      // ticks (only for sender bubbles)
       if (isSender) {
         const finalStatus = b.status || 'delivered';
         let tickText = '✔✔';
@@ -254,7 +276,17 @@ async function generateConversationFrames(messages, options = {}) {
     const outPath = path.join(TMP_DIR, frameName);
     fs.writeFileSync(outPath, canvas.toBuffer('image/png'));
 
-    results.push({ file: outPath });
+    if (cloudinary.config().cloud_name && process.env.CLOUDINARY_UPLOAD === 'true') {
+      try {
+        const uploaded = await cloudinary.uploader.upload(outPath, { resource_type: 'image' });
+        results.push(uploaded.secure_url);
+        try { fs.unlinkSync(outPath); } catch (e) {}
+      } catch (e) {
+        results.push(`${outPath}`);
+      }
+    } else {
+      results.push({ file: outPath, publicUrl: null });
+    }
   }
 
   return results;
