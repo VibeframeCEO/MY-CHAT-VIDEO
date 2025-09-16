@@ -38,6 +38,7 @@ function roundRect(ctx, x, y, w, h, r) {
   ctx.moveTo(x + r, y);
   ctx.arcTo(x + w, y, x + w, y + h, r);
   ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
   ctx.arcTo(x, y, x + w, y, r);
   ctx.closePath();
 }
@@ -90,7 +91,7 @@ function wrapText(ctx, text, maxWidth) {
   return lines;
 }
 
-async function generateConversationFrames(messages, options = {}, name = null) {
+async function generateConversationFrames(messages, options = {}) {
   const {
     width = 1080,
     height = 1920,
@@ -147,6 +148,7 @@ async function generateConversationFrames(messages, options = {}, name = null) {
       const b = bubbles[j];
 
       if (b.typing) {
+        // find the next real (non-typing) message from the same sender
         let nextRealIdx = -1;
         for (let k = j + 1; k < bubbles.length; k++) {
           if (!bubbles[k].typing && bubbles[k].sender === b.sender) {
@@ -154,8 +156,11 @@ async function generateConversationFrames(messages, options = {}, name = null) {
             break;
           }
         }
+        // include typing only if the corresponding real message is NOT yet visible in this frame
         if (nextRealIdx === -1 || nextRealIdx > state) {
           visibleBubbles.push(b);
+        } else {
+          // skip typing because its real message is already visible in this frame
         }
       } else {
         visibleBubbles.push(b);
@@ -163,15 +168,16 @@ async function generateConversationFrames(messages, options = {}, name = null) {
     }
     // --- end visibleBubbles builder ---
 
-    let cy = paddingTop + 120; // push bubbles down to leave space for name
+    let cy = paddingTop;
     const positions = [];
     for (let i = 0; i < visibleBubbles.length; i++) {
       positions.push(cy);
       cy += visibleBubbles[i].bubbleH + gapBetween;
     }
 
+    // Ensure we have at least one bubble (defensive)
     if (positions.length === 0) {
-      positions.push(paddingTop + 120);
+      positions.push(paddingTop);
     }
 
     const lastPos = positions[positions.length - 1];
@@ -200,16 +206,6 @@ async function generateConversationFrames(messages, options = {}, name = null) {
       ctx.fillRect(0, 0, width, canvas.height);
     }
 
-    // --- Draw name if provided ---
-    if (name) {
-      ctx.fillStyle = '#ffffff';
-      ctx.font = `bold ${Math.floor(fontSize * 1.2)}px sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'top';
-      ctx.fillText(name, width / 2, paddingTop - 80);
-      ctx.textAlign = 'start'; // reset
-    }
-
     for (let i = 0; i < visibleBubbles.length; i++) {
       const b = visibleBubbles[i];
       const bubbleY = positions[i];
@@ -231,10 +227,12 @@ async function generateConversationFrames(messages, options = {}, name = null) {
       ctx.restore();
 
       if (b.typing) {
+        // typing dots centered vertically inside bubble, and slightly shifted to match left/right side
         ctx.fillStyle = '#ffffff';
         const dotSize = Math.max(6, Math.floor(fontSize * 0.28));
-        const totalWidth = dotSize * 4;
+        const totalWidth = dotSize * 4; // spacing
         const startX = bubbleX + (b.bubbleW / 2) - (totalWidth / 2);
+
         const centerY = bubbleY + b.bubbleH / 2;
         for (let d = 0; d < 3; d++) {
           ctx.beginPath();
@@ -244,6 +242,7 @@ async function generateConversationFrames(messages, options = {}, name = null) {
         continue;
       }
 
+      // text
       ctx.fillStyle = '#ffffff';
       ctx.font = `${fontSize}px sans-serif`;
       ctx.textBaseline = 'top';
@@ -254,6 +253,7 @@ async function generateConversationFrames(messages, options = {}, name = null) {
         ty += b.lineHeight;
       }
 
+      // ticks (only for sender bubbles)
       if (isSender) {
         const finalStatus = b.status || 'delivered';
         let tickText = '✔✔';
@@ -296,7 +296,6 @@ app.post('/generate', async (req, res) => {
   try {
     const body = req.body || {};
     const messages = Array.isArray(body.messages) ? body.messages : [];
-    const name = typeof body.name === 'string' ? body.name.trim() : null;
     if (!messages.length) return res.status(400).json({ error: 'No messages provided' });
 
     const width = body.width || 1080;
@@ -306,7 +305,7 @@ app.post('/generate', async (req, res) => {
 
     const rawResults = await generateConversationFrames(messages, {
       width, height, fontSize, backgroundPath: templatePath
-    }, name);
+    });
 
     const results = rawResults.map(item => {
       const publicUrl = `${req.protocol}://${req.get('host')}/tmp/${path.basename(item.file)}`;
