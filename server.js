@@ -95,18 +95,18 @@ async function generateConversationFrames(messages, options = {}, name = null) {
     width = 1080,
     height = 1920,
     marginSides = 36,
-    bubblePaddingX = 40,   // ⬅ bumped padding
-    bubblePaddingY = 30,   // ⬅ bumped padding
+    bubblePaddingX = 40,
+    bubblePaddingY = 30,
     gapBetween = 22,
     fontSize = 54,
     backgroundPath
   } = options;
 
   const maxBubbleWidth = Math.floor(width * 0.75);
-  const minBubbleWidth = Math.floor(width * 0.35); // ⬅ NEW: minimum bubble width
+  const preferredWidth = Math.floor(width * 0.6); // ⬅ default consistent width
 
-  const headerHeight = 160; // reserve space for top bar
-  const paddingTop = headerHeight + 40; // push chat bubbles lower
+  const headerHeight = 160;
+  const paddingTop = headerHeight + 40;
 
   const measureCanvas = createCanvas(10, 10);
   const mctx = measureCanvas.getContext('2d');
@@ -136,11 +136,10 @@ async function generateConversationFrames(messages, options = {}, name = null) {
     const lineHeight = Math.max(fontSize * 1.12, fontSize + 6);
     const textWidth = Math.max(...lines.map(l => mctx.measureText(l).width), 0);
 
-    // ⬅ FIXED bubble width calculation
-    const bubbleW = Math.max(
-      minBubbleWidth,
-      Math.min(maxBubbleWidth, Math.ceil(textWidth) + bubblePaddingX * 2)
-    );
+    // ⬅ FIXED bubble width
+    let bubbleW = Math.ceil(textWidth) + bubblePaddingX * 2;
+    if (bubbleW < preferredWidth) bubbleW = preferredWidth;
+    if (bubbleW > maxBubbleWidth) bubbleW = maxBubbleWidth;
 
     const bubbleH = Math.ceil(lines.length * lineHeight + bubblePaddingY * 2);
     return { index: idx, text, sender, status: detected, lines, bubbleW, bubbleH, lineHeight };
@@ -150,12 +149,9 @@ async function generateConversationFrames(messages, options = {}, name = null) {
   const results = [];
 
   for (let state = 0; state < bubbles.length; state++) {
-
-    // --- Build visibleBubbles robustly ---
     const visibleBubbles = [];
     for (let j = 0; j <= state; j++) {
       const b = bubbles[j];
-
       if (b.typing) {
         let nextRealIdx = -1;
         for (let k = j + 1; k < bubbles.length; k++) {
@@ -171,7 +167,6 @@ async function generateConversationFrames(messages, options = {}, name = null) {
         visibleBubbles.push(b);
       }
     }
-    // --- end visibleBubbles builder ---
 
     let cy = paddingTop;
     const positions = [];
@@ -179,10 +174,7 @@ async function generateConversationFrames(messages, options = {}, name = null) {
       positions.push(cy);
       cy += visibleBubbles[i].bubbleH + gapBetween;
     }
-
-    if (positions.length === 0) {
-      positions.push(paddingTop);
-    }
+    if (positions.length === 0) positions.push(paddingTop);
 
     const lastPos = positions[positions.length - 1];
     const lastBubble = visibleBubbles[visibleBubbles.length - 1] || { bubbleH: 0 };
@@ -210,7 +202,7 @@ async function generateConversationFrames(messages, options = {}, name = null) {
       ctx.fillRect(0, 0, width, canvas.height);
     }
 
-    // --- Draw header bar + name ---
+    // header + name
     if (name) {
       ctx.fillStyle = '#000000';
       ctx.fillRect(0, 0, width, headerHeight);
@@ -220,7 +212,7 @@ async function generateConversationFrames(messages, options = {}, name = null) {
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(name, width / 2, headerHeight / 2);
-      ctx.textAlign = 'start'; // reset
+      ctx.textAlign = 'start';
     }
 
     for (let i = 0; i < visibleBubbles.length; i++) {
@@ -289,17 +281,7 @@ async function generateConversationFrames(messages, options = {}, name = null) {
     const outPath = path.join(TMP_DIR, frameName);
     fs.writeFileSync(outPath, canvas.toBuffer('image/png'));
 
-    if (cloudinary.config().cloud_name && process.env.CLOUDINARY_UPLOAD === 'true') {
-      try {
-        const uploaded = await cloudinary.uploader.upload(outPath, { resource_type: 'image' });
-        results.push(uploaded.secure_url);
-        try { fs.unlinkSync(outPath); } catch (e) {}
-      } catch (e) {
-        results.push(`${outPath}`);
-      }
-    } else {
-      results.push({ file: outPath, publicUrl: null });
-    }
+    results.push({ file: outPath, publicUrl: null });
   }
 
   return results;
@@ -327,7 +309,6 @@ app.post('/generate', async (req, res) => {
     });
 
     res.json({ frames: results });
-
   } catch (err) {
     console.error('Error generating conversation frames', err);
     res.status(500).json({ error: err.message || 'server error' });
