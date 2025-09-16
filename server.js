@@ -95,13 +95,15 @@ async function generateConversationFrames(messages, options = {}, name = null) {
     width = 1080,
     height = 1920,
     marginSides = 36,
-    bubblePaddingX = 32,
-    bubblePaddingY = 24,
+    bubblePaddingX = 40,   // ⬅ bumped padding
+    bubblePaddingY = 30,   // ⬅ bumped padding
     gapBetween = 22,
     fontSize = 54,
-    maxBubbleWidth = Math.floor(width * 0.75),
     backgroundPath
   } = options;
+
+  const maxBubbleWidth = Math.floor(width * 0.75);
+  const minBubbleWidth = Math.floor(width * 0.35); // ⬅ NEW: minimum bubble width
 
   const headerHeight = 160; // reserve space for top bar
   const paddingTop = headerHeight + 40; // push chat bubbles lower
@@ -120,19 +122,11 @@ async function generateConversationFrames(messages, options = {}, name = null) {
   }
 
   const bubbles = messages.map((msg, idx) => {
-   const sender = msg.sender || "Sender";
+    const sender = msg.sender || "Sender";
 
     if (msg.typing) {
-      const minBubbleWidth = Math.floor(width * 0.35); // at least 35% of screen
-      const maxBubbleWidth = Math.floor(width * 0.75); // already in your code
-
-  const bubbleW = Math.max(
-  minBubbleWidth,
-  Math.min(maxBubbleWidth, Math.ceil(textWidth) + bubblePaddingX * 2)
- );
-
-    const bubbleH = Math.ceil(lines.length * lineHeight + bubblePaddingY * 2);
-
+      const bubbleW = Math.floor(fontSize * 3.5);
+      const bubbleH = Math.floor(fontSize * 2);
       return { index: idx, sender, typing: true, bubbleW, bubbleH };
     }
 
@@ -141,7 +135,13 @@ async function generateConversationFrames(messages, options = {}, name = null) {
     const lines = wrapText(mctx, text, maxBubbleWidth - bubblePaddingX * 2);
     const lineHeight = Math.max(fontSize * 1.12, fontSize + 6);
     const textWidth = Math.max(...lines.map(l => mctx.measureText(l).width), 0);
-    const bubbleW = Math.min(maxBubbleWidth, Math.ceil(textWidth) + bubblePaddingX * 2);
+
+    // ⬅ FIXED bubble width calculation
+    const bubbleW = Math.max(
+      minBubbleWidth,
+      Math.min(maxBubbleWidth, Math.ceil(textWidth) + bubblePaddingX * 2)
+    );
+
     const bubbleH = Math.ceil(lines.length * lineHeight + bubblePaddingY * 2);
     return { index: idx, text, sender, status: detected, lines, bubbleW, bubbleH, lineHeight };
   });
