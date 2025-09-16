@@ -120,18 +120,18 @@ async function generateConversationFrames(messages, options = {}, name = null) {
   }
 
   const bubbles = messages.map((msg, idx) => {
-    const sender = msg.sender || "Sender";
+   const sender = msg.sender || "Sender";
 
     if (msg.typing) {
       const minBubbleWidth = Math.floor(width * 0.35); // at least 35% of screen
-const maxBubbleWidth = Math.floor(width * 0.75); // already in your code
+      const maxBubbleWidth = Math.floor(width * 0.75); // already in your code
 
-const bubbleW = Math.max(
+  const bubbleW = Math.max(
   minBubbleWidth,
   Math.min(maxBubbleWidth, Math.ceil(textWidth) + bubblePaddingX * 2)
-);
+ );
 
-const bubbleH = Math.ceil(lines.length * lineHeight + bubblePaddingY * 2);
+    const bubbleH = Math.ceil(lines.length * lineHeight + bubblePaddingY * 2);
 
       return { index: idx, sender, typing: true, bubbleW, bubbleH };
     }
