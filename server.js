@@ -95,7 +95,6 @@ async function generateConversationFrames(messages, options = {}) {
   const {
     width = 1080,
     height = 1920,
-    paddingTop = 200,
     marginSides = 36,
     bubblePaddingX = 32,
     bubblePaddingY = 24,
@@ -103,21 +102,33 @@ async function generateConversationFrames(messages, options = {}) {
     fontSize = 54,
     maxBubbleWidth = Math.floor(width * 0.75),
     backgroundPath,
-    profileName = null  // <-- NEW
+    profileName = null
   } = options;
 
-  const measureCanvas = createCanvas(10, 10);
-  const mctx = measureCanvas.getContext('2d');
-  mctx.font = `${fontSize}px sans-serif`;
+  const headerHeight = 160; // <-- reserve space for top bar/profile
+  const paddingTop = headerHeight + 40; // push bubbles lower
 
-  function detectStatusFromMsg(msg) {
-    if (!msg) return null;
-    const s = (msg.status || msg.state || msg.tick || '').toString().toLowerCase();
-    if (s === 'sent' || s === 'delivered' || s === 'seen' || s === 'read') return s === 'read' ? 'seen' : s;
-    if (msg.seen === true || msg.read === true || msg.read_at || msg.readAt) return 'seen';
-    if (msg.delivered === true || msg.delivered_at || msg.deliveredAt) return 'delivered';
-    return null;
+  // ... keep your measurement + bubble logic the same ...
+
+  const canvas = createCanvas(width, Math.min(cropHeight, height));
+  const ctx = canvas.getContext('2d');
+
+  // background (same as before)
+
+  // ---- DRAW TOP HEADER ----
+  if (profileName) {
+    // Top bar background (black like WhatsApp)
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(0, 0, width, headerHeight);
+
+    // Name
+    ctx.fillStyle = '#ffffff';
+    ctx.font = `bold ${Math.floor(fontSize * 1.1)}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(profileName, width / 2, headerHeight / 2);
   }
+  // -------------------------
 
   const bubbles = messages.map((msg, idx) => {
     const sender = msg.sender || "Sender";
