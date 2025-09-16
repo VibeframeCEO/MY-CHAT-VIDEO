@@ -102,7 +102,8 @@ async function generateConversationFrames(messages, options = {}) {
     gapBetween = 22,
     fontSize = 54,
     maxBubbleWidth = Math.floor(width * 0.75),
-    backgroundPath
+    backgroundPath,
+    profileName = null  // <-- NEW
   } = options;
 
   const measureCanvas = createCanvas(10, 10);
@@ -141,14 +142,10 @@ async function generateConversationFrames(messages, options = {}) {
   const results = [];
 
   for (let state = 0; state < bubbles.length; state++) {
-
-    // --- Build visibleBubbles robustly so typing is removed when real message is already present ---
     const visibleBubbles = [];
     for (let j = 0; j <= state; j++) {
       const b = bubbles[j];
-
       if (b.typing) {
-        // find the next real (non-typing) message from the same sender
         let nextRealIdx = -1;
         for (let k = j + 1; k < bubbles.length; k++) {
           if (!bubbles[k].typing && bubbles[k].sender === b.sender) {
@@ -156,17 +153,13 @@ async function generateConversationFrames(messages, options = {}) {
             break;
           }
         }
-        // include typing only if the corresponding real message is NOT yet visible in this frame
         if (nextRealIdx === -1 || nextRealIdx > state) {
           visibleBubbles.push(b);
-        } else {
-          // skip typing because its real message is already visible in this frame
         }
       } else {
         visibleBubbles.push(b);
       }
     }
-    // --- end visibleBubbles builder ---
 
     let cy = paddingTop;
     const positions = [];
@@ -174,8 +167,6 @@ async function generateConversationFrames(messages, options = {}) {
       positions.push(cy);
       cy += visibleBubbles[i].bubbleH + gapBetween;
     }
-
-    // Ensure we have at least one bubble (defensive)
     if (positions.length === 0) {
       positions.push(paddingTop);
     }
@@ -206,6 +197,16 @@ async function generateConversationFrames(messages, options = {}) {
       ctx.fillRect(0, 0, width, canvas.height);
     }
 
+    // ---- DRAW PROFILE NAME AT TOP ----
+    if (profileName) {
+      ctx.fillStyle = '#ffffff';
+      ctx.font = `bold ${Math.floor(fontSize * 1.2)}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      ctx.fillText(profileName, width / 2, 40); // top center
+    }
+    // ---------------------------------
+
     for (let i = 0; i < visibleBubbles.length; i++) {
       const b = visibleBubbles[i];
       const bubbleY = positions[i];
@@ -227,12 +228,10 @@ async function generateConversationFrames(messages, options = {}) {
       ctx.restore();
 
       if (b.typing) {
-        // typing dots centered vertically inside bubble, and slightly shifted to match left/right side
         ctx.fillStyle = '#ffffff';
         const dotSize = Math.max(6, Math.floor(fontSize * 0.28));
-        const totalWidth = dotSize * 4; // spacing
+        const totalWidth = dotSize * 4;
         const startX = bubbleX + (b.bubbleW / 2) - (totalWidth / 2);
-
         const centerY = bubbleY + b.bubbleH / 2;
         for (let d = 0; d < 3; d++) {
           ctx.beginPath();
@@ -253,7 +252,6 @@ async function generateConversationFrames(messages, options = {}) {
         ty += b.lineHeight;
       }
 
-      // ticks (only for sender bubbles)
       if (isSender) {
         const finalStatus = b.status || 'delivered';
         let tickText = '✔✔';
@@ -302,9 +300,10 @@ app.post('/generate', async (req, res) => {
     const height = body.height || 1920;
     const fontSize = body.fontSize || 54;
     const templatePath = body.templatePath ? path.resolve(body.templatePath) : null;
+    const profileName = body.name || null; // <-- NEW
 
     const rawResults = await generateConversationFrames(messages, {
-      width, height, fontSize, backgroundPath: templatePath
+      width, height, fontSize, backgroundPath: templatePath, profileName
     });
 
     const results = rawResults.map(item => {
