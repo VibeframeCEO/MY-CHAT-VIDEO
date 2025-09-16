@@ -38,7 +38,6 @@ function roundRect(ctx, x, y, w, h, r) {
   ctx.moveTo(x + r, y);
   ctx.arcTo(x + w, y, x + w, y + h, r);
   ctx.arcTo(x + w, y + h, x, y + h, r);
-  ctx.arcTo(x, y + h, x, y, r);
   ctx.arcTo(x, y, x + w, y, r);
   ctx.closePath();
 }
@@ -91,7 +90,7 @@ function wrapText(ctx, text, maxWidth) {
   return lines;
 }
 
-async function generateConversationFrames(messages, options = {}) {
+async function generateConversationFrames(messages, options = {}, name = null) {
   const {
     width = 1080,
     height = 1920,
@@ -102,8 +101,7 @@ async function generateConversationFrames(messages, options = {}) {
     gapBetween = 22,
     fontSize = 54,
     maxBubbleWidth = Math.floor(width * 0.75),
-    backgroundPath,
-    profileName = null  // <-- NEW
+    backgroundPath
   } = options;
 
   const measureCanvas = createCanvas(10, 10);
@@ -142,9 +140,12 @@ async function generateConversationFrames(messages, options = {}) {
   const results = [];
 
   for (let state = 0; state < bubbles.length; state++) {
+
+    // --- Build visibleBubbles robustly so typing is removed when real message is already present ---
     const visibleBubbles = [];
     for (let j = 0; j <= state; j++) {
       const b = bubbles[j];
+
       if (b.typing) {
         let nextRealIdx = -1;
         for (let k = j + 1; k < bubbles.length; k++) {
@@ -160,15 +161,17 @@ async function generateConversationFrames(messages, options = {}) {
         visibleBubbles.push(b);
       }
     }
+    // --- end visibleBubbles builder ---
 
-    let cy = paddingTop;
+    let cy = paddingTop + 120; // push bubbles down to leave space for name
     const positions = [];
     for (let i = 0; i < visibleBubbles.length; i++) {
       positions.push(cy);
       cy += visibleBubbles[i].bubbleH + gapBetween;
     }
+
     if (positions.length === 0) {
-      positions.push(paddingTop);
+      positions.push(paddingTop + 120);
     }
 
     const lastPos = positions[positions.length - 1];
@@ -197,15 +200,15 @@ async function generateConversationFrames(messages, options = {}) {
       ctx.fillRect(0, 0, width, canvas.height);
     }
 
-    // ---- DRAW PROFILE NAME AT TOP ----
-    if (profileName) {
+    // --- Draw name if provided ---
+    if (name) {
       ctx.fillStyle = '#ffffff';
       ctx.font = `bold ${Math.floor(fontSize * 1.2)}px sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
-      ctx.fillText(profileName, width / 2, 40); // top center
+      ctx.fillText(name, width / 2, paddingTop - 80);
+      ctx.textAlign = 'start'; // reset
     }
-    // ---------------------------------
 
     for (let i = 0; i < visibleBubbles.length; i++) {
       const b = visibleBubbles[i];
@@ -241,7 +244,6 @@ async function generateConversationFrames(messages, options = {}) {
         continue;
       }
 
-      // text
       ctx.fillStyle = '#ffffff';
       ctx.font = `${fontSize}px sans-serif`;
       ctx.textBaseline = 'top';
@@ -294,17 +296,17 @@ app.post('/generate', async (req, res) => {
   try {
     const body = req.body || {};
     const messages = Array.isArray(body.messages) ? body.messages : [];
+    const name = typeof body.name === 'string' ? body.name.trim() : null;
     if (!messages.length) return res.status(400).json({ error: 'No messages provided' });
 
     const width = body.width || 1080;
     const height = body.height || 1920;
     const fontSize = body.fontSize || 54;
     const templatePath = body.templatePath ? path.resolve(body.templatePath) : null;
-    const profileName = body.name || null; // <-- NEW
 
     const rawResults = await generateConversationFrames(messages, {
-      width, height, fontSize, backgroundPath: templatePath, profileName
-    });
+      width, height, fontSize, backgroundPath: templatePath
+    }, name);
 
     const results = rawResults.map(item => {
       const publicUrl = `${req.protocol}://${req.get('host')}/tmp/${path.basename(item.file)}`;
