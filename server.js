@@ -103,7 +103,7 @@ async function generateConversationFrames(messages, options = {}) {
     fontSize = 54,
     maxBubbleWidth = Math.floor(width * 0.75),
     backgroundPath,
-    name = null // 👈 added here
+    profileName = null  // <-- NEW
   } = options;
 
   const measureCanvas = createCanvas(10, 10);
@@ -142,7 +142,6 @@ async function generateConversationFrames(messages, options = {}) {
   const results = [];
 
   for (let state = 0; state < bubbles.length; state++) {
-
     const visibleBubbles = [];
     for (let j = 0; j <= state; j++) {
       const b = bubbles[j];
@@ -168,7 +167,9 @@ async function generateConversationFrames(messages, options = {}) {
       positions.push(cy);
       cy += visibleBubbles[i].bubbleH + gapBetween;
     }
-    if (positions.length === 0) positions.push(paddingTop);
+    if (positions.length === 0) {
+      positions.push(paddingTop);
+    }
 
     const lastPos = positions[positions.length - 1];
     const lastBubble = visibleBubbles[visibleBubbles.length - 1] || { bubbleH: 0 };
@@ -196,28 +197,30 @@ async function generateConversationFrames(messages, options = {}) {
       ctx.fillRect(0, 0, width, canvas.height);
     }
 
-    // 👇 draw the "name" on top center if provided
-    if (name) {
+    // ---- DRAW PROFILE NAME AT TOP ----
+    if (profileName) {
       ctx.fillStyle = '#ffffff';
-      ctx.font = `${Math.floor(fontSize * 1.2)}px sans-serif`;
+      ctx.font = `bold ${Math.floor(fontSize * 1.2)}px sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
-      ctx.fillText(name, width / 2, 40); // 40px from top
+      ctx.fillText(profileName, width / 2, 40); // top center
     }
+    // ---------------------------------
 
-    // bubbles
     for (let i = 0; i < visibleBubbles.length; i++) {
       const b = visibleBubbles[i];
       const bubbleY = positions[i];
       const isSender = (b.sender.toLowerCase() === "sender");
       const bubbleX = isSender ? (width - marginSides - b.bubbleW) : marginSides;
 
+      // shadow
       ctx.save();
       ctx.fillStyle = 'rgba(0,0,0,0.25)';
       roundRect(ctx, bubbleX + 3, bubbleY + 6, b.bubbleW, b.bubbleH, 26);
       ctx.fill();
       ctx.restore();
 
+      // bubble
       ctx.save();
       ctx.fillStyle = isSender ? '#2563eb' : '#1f2937';
       roundRect(ctx, bubbleX, bubbleY, b.bubbleW, b.bubbleH, 26);
@@ -238,6 +241,7 @@ async function generateConversationFrames(messages, options = {}) {
         continue;
       }
 
+      // text
       ctx.fillStyle = '#ffffff';
       ctx.font = `${fontSize}px sans-serif`;
       ctx.textBaseline = 'top';
@@ -296,10 +300,10 @@ app.post('/generate', async (req, res) => {
     const height = body.height || 1920;
     const fontSize = body.fontSize || 54;
     const templatePath = body.templatePath ? path.resolve(body.templatePath) : null;
-    const name = body.name || null; // 👈 grab name from body
+    const profileName = body.name || null; // <-- NEW
 
     const rawResults = await generateConversationFrames(messages, {
-      width, height, fontSize, backgroundPath: templatePath, name
+      width, height, fontSize, backgroundPath: templatePath, profileName
     });
 
     const results = rawResults.map(item => {
