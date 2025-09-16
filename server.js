@@ -123,8 +123,16 @@ async function generateConversationFrames(messages, options = {}, name = null) {
     const sender = msg.sender || "Sender";
 
     if (msg.typing) {
-      const bubbleW = Math.floor(fontSize * 3.5);
-      const bubbleH = Math.floor(fontSize * 2);
+      const minBubbleWidth = Math.floor(width * 0.35); // at least 35% of screen
+const maxBubbleWidth = Math.floor(width * 0.75); // already in your code
+
+const bubbleW = Math.max(
+  minBubbleWidth,
+  Math.min(maxBubbleWidth, Math.ceil(textWidth) + bubblePaddingX * 2)
+);
+
+const bubbleH = Math.ceil(lines.length * lineHeight + bubblePaddingY * 2);
+
       return { index: idx, sender, typing: true, bubbleW, bubbleH };
     }
 
