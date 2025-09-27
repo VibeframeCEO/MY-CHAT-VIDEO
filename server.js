@@ -105,6 +105,9 @@ async function generateConversationFrames(messages, options = {}) {
     backgroundPath
   } = options;
 
+  // Maximum number of bubbles to display at once (prevents overflow)
+  const MAX_VISIBLE_BUBBLES = 8;
+
   const measureCanvas = createCanvas(10, 10);
   const mctx = measureCanvas.getContext('2d');
   mctx.font = `${fontSize}px sans-serif`;
@@ -141,11 +144,14 @@ async function generateConversationFrames(messages, options = {}) {
   const results = [];
 
   for (let state = 0; state < bubbles.length; state++) {
+
+    // --- Build visibleBubbles robustly so typing is removed when real message is already present ---
     const visibleBubbles = [];
     for (let j = 0; j <= state; j++) {
       const b = bubbles[j];
 
       if (b.typing) {
+        // find the next real (non-typing) message from the same sender
         let nextRealIdx = -1;
         for (let k = j + 1; k < bubbles.length; k++) {
           if (!bubbles[k].typing && bubbles[k].sender === b.sender) {
@@ -153,12 +159,22 @@ async function generateConversationFrames(messages, options = {}) {
             break;
           }
         }
+        // include typing only if the corresponding real message is NOT yet visible in this frame
         if (nextRealIdx === -1 || nextRealIdx > state) {
           visibleBubbles.push(b);
+        } else {
+          // skip typing because its real message is already visible in this frame
         }
       } else {
         visibleBubbles.push(b);
       }
+    }
+    // --- end visibleBubbles builder ---
+
+    // If there are more than MAX_VISIBLE_BUBBLES, keep only the last ones
+    if (visibleBubbles.length > MAX_VISIBLE_BUBBLES) {
+      // remove older entries, keep last MAX_VISIBLE_BUBBLES
+      visibleBubbles.splice(0, visibleBubbles.length - MAX_VISIBLE_BUBBLES);
     }
 
     let cy = paddingTop;
@@ -168,6 +184,7 @@ async function generateConversationFrames(messages, options = {}) {
       cy += visibleBubbles[i].bubbleH + gapBetween;
     }
 
+    // Ensure we have at least one bubble (defensive)
     if (positions.length === 0) {
       positions.push(paddingTop);
     }
@@ -178,6 +195,7 @@ async function generateConversationFrames(messages, options = {}) {
     const canvas = createCanvas(width, Math.min(cropHeight, height));
     const ctx = canvas.getContext('2d');
 
+    // background
     if (backgroundPath && fs.existsSync(backgroundPath)) {
       try {
         const bg = await loadImage(backgroundPath);
@@ -203,12 +221,14 @@ async function generateConversationFrames(messages, options = {}) {
       const isSender = (b.sender.toLowerCase() === "sender");
       const bubbleX = isSender ? (width - marginSides - b.bubbleW) : marginSides;
 
+      // shadow
       ctx.save();
       ctx.fillStyle = 'rgba(0,0,0,0.25)';
       roundRect(ctx, bubbleX + 3, bubbleY + 6, b.bubbleW, b.bubbleH, 26);
       ctx.fill();
       ctx.restore();
 
+      // bubble
       ctx.save();
       ctx.fillStyle = isSender ? '#2563eb' : '#1f2937';
       roundRect(ctx, bubbleX, bubbleY, b.bubbleW, b.bubbleH, 26);
@@ -216,10 +236,12 @@ async function generateConversationFrames(messages, options = {}) {
       ctx.restore();
 
       if (b.typing) {
+        // typing dots centered vertically inside bubble, and slightly shifted to match left/right side
         ctx.fillStyle = '#ffffff';
         const dotSize = Math.max(6, Math.floor(fontSize * 0.28));
-        const totalWidth = dotSize * 4;
+        const totalWidth = dotSize * 4; // spacing
         const startX = bubbleX + (b.bubbleW / 2) - (totalWidth / 2);
+
         const centerY = bubbleY + b.bubbleH / 2;
         for (let d = 0; d < 3; d++) {
           ctx.beginPath();
@@ -229,6 +251,7 @@ async function generateConversationFrames(messages, options = {}) {
         continue;
       }
 
+      // text
       ctx.fillStyle = '#ffffff';
       ctx.font = `${fontSize}px sans-serif`;
       ctx.textBaseline = 'top';
@@ -239,7 +262,7 @@ async function generateConversationFrames(messages, options = {}) {
         ty += b.lineHeight;
       }
 
-      // ✅ ticks (stacked WhatsApp style)
+      // ticks (only for sender bubbles)
       if (isSender) {
         const finalStatus = b.status || 'delivered';
         let tickCount = 2;
@@ -250,16 +273,13 @@ async function generateConversationFrames(messages, options = {}) {
         const tickFontSize = Math.max(18, Math.floor(fontSize * 0.8));
         ctx.font = `${tickFontSize}px sans-serif`;
         ctx.textBaseline = 'alphabetic';
-
-        const tickChar = '✔';
-        const tickWidth = ctx.measureText(tickChar).width;
+        const tickWidth = ctx.measureText('✔').width;
         const tickX = bubbleX + b.bubbleW - tickWidth - 14;
         const tickY = bubbleY + b.bubbleH - bubblePaddingY * 0.1;
-
         ctx.fillStyle = tickColor;
-        ctx.fillText(tickChar, tickX, tickY);
+        ctx.fillText('✔', tickX, tickY);
         if (tickCount === 2) {
-          ctx.fillText(tickChar, tickX + tickWidth * 0.6, tickY);
+          ctx.fillText('✔', tickX + tickWidth * 0.6, tickY);
         }
       }
     }
