@@ -105,7 +105,7 @@ async function generateConversationFrames(messages, options = {}) {
     backgroundPath
   } = options;
 
-  // Maximum number of bubbles to display at once (prevents overflow)
+  // Number of messages after which the frames should restart
   const MAX_VISIBLE_BUBBLES = 8;
 
   const measureCanvas = createCanvas(10, 10);
@@ -145,13 +145,15 @@ async function generateConversationFrames(messages, options = {}) {
 
   for (let state = 0; state < bubbles.length; state++) {
 
-    // --- Build visibleBubbles robustly so typing is removed when real message is already present ---
+    // --- Build visibleBubbles so it RESTARTS every MAX_VISIBLE_BUBBLES messages ---
     const visibleBubbles = [];
-    for (let j = 0; j <= state; j++) {
+    const cycleStart = Math.floor(state / MAX_VISIBLE_BUBBLES) * MAX_VISIBLE_BUBBLES;
+    for (let j = cycleStart; j <= state; j++) {
       const b = bubbles[j];
+      if (!b) continue;
 
       if (b.typing) {
-        // find the next real (non-typing) message from the same sender
+        // find the next real (non-typing) message from the same sender (anywhere after j)
         let nextRealIdx = -1;
         for (let k = j + 1; k < bubbles.length; k++) {
           if (!bubbles[k].typing && bubbles[k].sender === b.sender) {
@@ -171,12 +173,6 @@ async function generateConversationFrames(messages, options = {}) {
     }
     // --- end visibleBubbles builder ---
 
-    // If there are more than MAX_VISIBLE_BUBBLES, keep only the last ones
-    if (visibleBubbles.length > MAX_VISIBLE_BUBBLES) {
-      // remove older entries, keep last MAX_VISIBLE_BUBBLES
-      visibleBubbles.splice(0, visibleBubbles.length - MAX_VISIBLE_BUBBLES);
-    }
-
     let cy = paddingTop;
     const positions = [];
     for (let i = 0; i < visibleBubbles.length; i++) {
@@ -184,7 +180,6 @@ async function generateConversationFrames(messages, options = {}) {
       cy += visibleBubbles[i].bubbleH + gapBetween;
     }
 
-    // Ensure we have at least one bubble (defensive)
     if (positions.length === 0) {
       positions.push(paddingTop);
     }
