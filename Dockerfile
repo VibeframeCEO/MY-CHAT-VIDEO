@@ -19,6 +19,7 @@ COPY package*.json ./
 # Use npm install (not ci) so it works even without a lock file sync
 RUN npm install --omit=dev
 
+COPY font /app/font
 # Copy the rest
 COPY . .
 
