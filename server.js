@@ -1,15 +1,12 @@
-// server.js - Bubble generator (Option B: produce a frame per conversation state)
+// server.js - Bubble generator
 const express = require('express');
 const bodyParser = require('body-parser');
-const { createCanvas, loadImage, registerFont } = require('canvas');
+const { createCanvas, loadImage } = require('canvas');
 const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const morgan = require('morgan');
 const cloudinary = require('cloudinary').v2;
-
-// Optional: register a TTF font if you have one
-// registerFont(path.join(__dirname, 'fonts', 'DejaVuSans-Bold.ttf'), { family: 'DejaVu' });
 
 const PORT = process.env.PORT || 3000;
 const TMP_DIR = process.env.TMP_DIR || '/tmp';
@@ -99,7 +96,6 @@ async function generateConversationFrames(messages, options = {}) {
     width = 1080,
     height = 1920,
     paddingTop = 200,
-    paddingBottom = 200,
     marginSides = 36,
     bubblePaddingX = 32,
     bubblePaddingY = 24,
@@ -109,26 +105,32 @@ async function generateConversationFrames(messages, options = {}) {
     backgroundPath
   } = options;
 
+  // Number of messages after which the frames should restart
+  const MAX_VISIBLE_BUBBLES = 8;
+
   const measureCanvas = createCanvas(10, 10);
   const mctx = measureCanvas.getContext('2d');
   mctx.font = `${fontSize}px sans-serif`;
 
-  // helper: detect a "status" for a message from various possible fields
   function detectStatusFromMsg(msg) {
     if (!msg) return null;
-    // explicit status string
     const s = (msg.status || msg.state || msg.tick || '').toString().toLowerCase();
     if (s === 'sent' || s === 'delivered' || s === 'seen' || s === 'read') return s === 'read' ? 'seen' : s;
-    // booleans / synonyms
     if (msg.seen === true || msg.read === true || msg.read_at || msg.readAt) return 'seen';
     if (msg.delivered === true || msg.delivered_at || msg.deliveredAt) return 'delivered';
-    // fallback null -> we'll default later
     return null;
   }
 
   const bubbles = messages.map((msg, idx) => {
+    const sender = msg.sender || "Sender";
+
+    if (msg.typing) {
+      const bubbleW = Math.floor(fontSize * 3.5);
+      const bubbleH = Math.floor(fontSize * 2);
+      return { index: idx, sender, typing: true, bubbleW, bubbleH };
+    }
+
     const text = String(msg.text || '').trim();
-    const sender = msg.sender || msg.role || "Sender";
     const detected = detectStatusFromMsg(msg);
     const lines = wrapText(mctx, text, maxBubbleWidth - bubblePaddingX * 2);
     const lineHeight = Math.max(fontSize * 1.12, fontSize + 6);
@@ -142,9 +144,34 @@ async function generateConversationFrames(messages, options = {}) {
   const results = [];
 
   for (let state = 0; state < bubbles.length; state++) {
-    const cycleIndex = state % 10;
-    const startIndex = state - cycleIndex;
-    const visibleBubbles = bubbles.slice(startIndex, state + 1);
+
+    // --- Build visibleBubbles so it RESTARTS every MAX_VISIBLE_BUBBLES messages ---
+    const visibleBubbles = [];
+    const cycleStart = Math.floor(state / MAX_VISIBLE_BUBBLES) * MAX_VISIBLE_BUBBLES;
+    for (let j = cycleStart; j <= state; j++) {
+      const b = bubbles[j];
+      if (!b) continue;
+
+      if (b.typing) {
+        // find the next real (non-typing) message from the same sender (anywhere after j)
+        let nextRealIdx = -1;
+        for (let k = j + 1; k < bubbles.length; k++) {
+          if (!bubbles[k].typing && bubbles[k].sender === b.sender) {
+            nextRealIdx = k;
+            break;
+          }
+        }
+        // include typing only if the corresponding real message is NOT yet visible in this frame
+        if (nextRealIdx === -1 || nextRealIdx > state) {
+          visibleBubbles.push(b);
+        } else {
+          // skip typing because its real message is already visible in this frame
+        }
+      } else {
+        visibleBubbles.push(b);
+      }
+    }
+    // --- end visibleBubbles builder ---
 
     let cy = paddingTop;
     const positions = [];
@@ -153,23 +180,28 @@ async function generateConversationFrames(messages, options = {}) {
       cy += visibleBubbles[i].bubbleH + gapBetween;
     }
 
-    const cropHeight = positions[positions.length - 1] + visibleBubbles[visibleBubbles.length - 1].bubbleH + 50;
+    if (positions.length === 0) {
+      positions.push(paddingTop);
+    }
+
+    const lastPos = positions[positions.length - 1];
+    const lastBubble = visibleBubbles[visibleBubbles.length - 1] || { bubbleH: 0 };
+    const cropHeight = lastPos + lastBubble.bubbleH + 50;
     const canvas = createCanvas(width, Math.min(cropHeight, height));
     const ctx = canvas.getContext('2d');
 
-    // draw background in full width without squeezing
+    // background
     if (backgroundPath && fs.existsSync(backgroundPath)) {
       try {
         const bg = await loadImage(backgroundPath);
         const aspect = bg.width / bg.height;
-        const bgHeight = width / aspect;  // maintain aspect ratio
+        const bgHeight = width / aspect;
         ctx.drawImage(bg, 0, 0, width, bgHeight);
-        // if bg smaller than canvas, fill rest with dark color
         if (bgHeight < canvas.height) {
           ctx.fillStyle = '#0f1720';
           ctx.fillRect(0, bgHeight, width, canvas.height - bgHeight);
         }
-      } catch (e) {
+      } catch {
         ctx.fillStyle = '#0f1720';
         ctx.fillRect(0, 0, width, canvas.height);
       }
@@ -181,22 +213,38 @@ async function generateConversationFrames(messages, options = {}) {
     for (let i = 0; i < visibleBubbles.length; i++) {
       const b = visibleBubbles[i];
       const bubbleY = positions[i];
-      const isSender = (b.sender.toString().toLowerCase() === "sender");
+      const isSender = (b.sender.toLowerCase() === "sender");
       const bubbleX = isSender ? (width - marginSides - b.bubbleW) : marginSides;
 
-      // subtle shadow
+      // shadow
       ctx.save();
       ctx.fillStyle = 'rgba(0,0,0,0.25)';
       roundRect(ctx, bubbleX + 3, bubbleY + 6, b.bubbleW, b.bubbleH, 26);
       ctx.fill();
       ctx.restore();
 
-      // bubble fill
+      // bubble
       ctx.save();
       ctx.fillStyle = isSender ? '#2563eb' : '#1f2937';
       roundRect(ctx, bubbleX, bubbleY, b.bubbleW, b.bubbleH, 26);
       ctx.fill();
       ctx.restore();
+
+      if (b.typing) {
+        // typing dots centered vertically inside bubble, and slightly shifted to match left/right side
+        ctx.fillStyle = '#ffffff';
+        const dotSize = Math.max(6, Math.floor(fontSize * 0.28));
+        const totalWidth = dotSize * 4; // spacing
+        const startX = bubbleX + (b.bubbleW / 2) - (totalWidth / 2);
+
+        const centerY = bubbleY + b.bubbleH / 2;
+        for (let d = 0; d < 3; d++) {
+          ctx.beginPath();
+          ctx.arc(startX + d * (dotSize * 1.7), centerY, dotSize, 0, 2 * Math.PI);
+          ctx.fill();
+        }
+        continue;
+      }
 
       // text
       ctx.fillStyle = '#ffffff';
@@ -209,46 +257,26 @@ async function generateConversationFrames(messages, options = {}) {
         ty += b.lineHeight;
       }
 
-// ---------- TICKS logic ----------
-const finalStatus = b.status || 'delivered';
+      // ticks (only for sender bubbles)
+      if (isSender) {
+        const finalStatus = b.status || 'delivered';
+        let tickCount = 2;
+        let tickColor = '#9ca3af';
+        if (finalStatus === 'sent') tickCount = 1;
+        if (finalStatus === 'seen') tickColor = '#0080ff';
 
-let tickText = '✔✔';
-let tickColor = '#9ca3af'; // gray
-
-if (finalStatus === 'sent') {
-  tickText = '✔';
-  tickColor = '#9ca3af';
-} else if (finalStatus === 'delivered') {
-  tickText = '✔✔';
-  tickColor = '#9ca3af';
-} else if (finalStatus === 'seen' || finalStatus === 'read') {
-  tickText = '✔✔';
-  tickColor = '#0080ff'; // blue
-}
-
-// bigger ticks
-const tickFontSize = Math.max(18, Math.floor(fontSize * 0.8));
-ctx.font = `${tickFontSize}px sans-serif`;
-ctx.textBaseline = 'alphabetic';
-
-const tickWidth = ctx.measureText(tickText).width;
-
-// ✅ placement differs for sender vs receiver
-let tickX, tickY;
-if (isSender) {
-  tickX = bubbleX + b.bubbleW - tickWidth - 10; // right aligned
-  tickY = bubbleY + b.bubbleH - bubblePaddingY * 0.1;
-} else {
-  tickX = bubbleX + 10; // left aligned
-  tickY = bubbleY + b.bubbleH - bubblePaddingY * 0.1;
-}
-
-ctx.fillStyle = tickColor;
-ctx.fillText(tickText, tickX, tickY);
-// ---------- end ticks ----------
-
-
-
+        const tickFontSize = Math.max(18, Math.floor(fontSize * 0.8));
+        ctx.font = `${tickFontSize}px sans-serif`;
+        ctx.textBaseline = 'alphabetic';
+        const tickWidth = ctx.measureText('✔').width;
+        const tickX = bubbleX + b.bubbleW - tickWidth - 14;
+        const tickY = bubbleY + b.bubbleH - bubblePaddingY * 0.1;
+        ctx.fillStyle = tickColor;
+        ctx.fillText('✔', tickX, tickY);
+        if (tickCount === 2) {
+          ctx.fillText('✔', tickX + tickWidth * 0.6, tickY);
+        }
+      }
     }
 
     const frameName = `${frameBase}_${String(state).padStart(3, '0')}.png`;
@@ -280,24 +308,15 @@ app.post('/generate', async (req, res) => {
     const width = body.width || 1080;
     const height = body.height || 1920;
     const fontSize = body.fontSize || 54;
-    const templatePath = body.templatePath ? path.resolve(body.templatePath) : path.join(__dirname, 'templates', 'phone-ui.png');
-
-    if (body.cloudinaryUpload === true) process.env.CLOUDINARY_UPLOAD = 'true';
+    const templatePath = body.templatePath ? path.resolve(body.templatePath) : null;
 
     const rawResults = await generateConversationFrames(messages, {
       width, height, fontSize, backgroundPath: templatePath
     });
 
     const results = rawResults.map(item => {
-      if (typeof item === 'string') {
-        if (item.startsWith('http')) return { url: item, local: null };
-        return { url: null, local: item };
-      } else if (item && item.file) {
-        const publicUrl = `${req.protocol}://${req.get('host')}/tmp/${path.basename(item.file)}`;
-        return { url: publicUrl, local: item.file };
-      } else {
-        return { url: null, local: null };
-      }
+      const publicUrl = `${req.protocol}://${req.get('host')}/tmp/${path.basename(item.file)}`;
+      return { url: publicUrl, local: item.file };
     });
 
     res.json({ frames: results });
@@ -308,21 +327,17 @@ app.post('/generate', async (req, res) => {
   }
 });
 
-// cleanup tmp dir
 setInterval(() => {
   const maxAge = 2 * 60 * 1000;
   const now = Date.now();
   fs.readdir(TMP_DIR, (err, files) => {
-    if (err) return console.error('Cleanup error (readdir):', err);
+    if (err) return;
     files.forEach(file => {
       const filePath = path.join(TMP_DIR, file);
       fs.stat(filePath, (err, stats) => {
-        if (err) return console.error('Cleanup error (stat):', err);
+        if (err) return;
         if (now - stats.mtimeMs > maxAge) {
-          fs.unlink(filePath, err => {
-            if (err) console.error('Cleanup error (unlink):', err);
-            else console.log('🗑️ Deleted old file:', filePath);
-          });
+          fs.unlink(filePath, () => {});
         }
       });
     });
