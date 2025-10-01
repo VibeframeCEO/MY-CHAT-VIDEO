@@ -1,7 +1,8 @@
-# Use Node 20 (Debian based)
+# Use Node 20 (compatible with canvas v2)
 FROM node:20-bullseye
 
-# Install runtime/build deps for node-canvas + ffmpeg + fonts
+# Install runtime/build deps for node-canvas
+# (these names are for Debian; Railway base images use Debian)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libcairo2-dev \
@@ -9,23 +10,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libjpeg-dev \
     libgif-dev \
     librsvg2-dev \
-    ffmpeg \
-    fonts-dejavu \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Install deps first (layer caching)
+# Install deps first (better layer caching)
 COPY package*.json ./
+
+# Use npm install (not ci) so it works even without a lock file sync
 RUN npm install --omit=dev
 
-# Copy custom font into image
 COPY font /app/font
 
-# Copy the rest of your code
+# Copy the rest
 COPY . .
 
-# (Optional) make PORT explicit; Railway sets it anyway
+# (Optional) make PORT explicit; Railway will set it anyway
 ENV PORT=3000
 EXPOSE 3000
 
